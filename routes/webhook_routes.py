@@ -29,18 +29,18 @@ def collect_info():
     call_sid = request.form.get("CallSid")
     user_input = request.form.get("SpeechResult") or ""
 
-    # If no speech heard, end politely
+    # If Twilio didn't get speech, fallback politely
     if not user_input.strip():
         return str(build_hangup("It seems we didn’t hear you. Please call back later. Goodbye."))
 
-    # Store input in session
+    # Save caller input to session memory
     session_memory.setdefault(call_sid, []).append({"role": "user", "content": user_input})
 
-    # Load SOP instructions
+    # Load your SOP prompt text
     with open("prompts/retention_sop.md") as f:
         sop = f.read()
 
-    # Build message context for GPT
+    # Build full message chain for GPT context
     messages = [{"role": "system", "content": sop}] + session_memory[call_sid]
 
     # Call OpenAI
@@ -50,10 +50,10 @@ def collect_info():
     )
     bot_reply = response.choices[0].message.content
 
-    # Add AI reply to memory
+    # Save AI reply to session memory
     session_memory[call_sid].append({"role": "assistant", "content": bot_reply})
 
-    # Run your retention parser
+    # Run your offer parser on what caller said so you can log it
     status, offer_used, explanation = parse_offer(user_input, session_memory[call_sid])
 
     retention_offer_made = True if offer_used != "unknown" else False
@@ -70,9 +70,10 @@ def collect_info():
         full_messages=json.dumps(messages)
     )
 
-    # ✅ ✅ ✅ IMPORTANT: DO NOT force hangup if "declined" → let GPT handle the goodbye naturally
+    # ✅ DO NOT force hangup — let GPT handle ending
     return str(build_gather(bot_reply, "/collect-info"))
 
 @webhook_bp.route("/no-input", methods=["POST"])
 def no_input():
     return str(build_hangup("It seems we might be having trouble hearing you. Please call back later. Goodbye."))
+
