@@ -13,6 +13,14 @@ def load_retention_offers():
 
 retention_offers = load_retention_offers()
 
+# Define keywords to detect each offer
+offer_keywords = {
+    "Pause membership": ["pause", "membership"],
+    "Apply credits": ["credit", "apply credit"],
+    "Downgrade membership": ["downgrade"],
+    "50% off your next 2 billing cycles": ["50%", "half off"]
+}
+
 # Phrases that count as acceptance
 accepted_phrases = ["yes", "sounds good", "let’s do it", "i'll take it", "sure", "okay", "i accept", "i'll do that", "that works"]
 
@@ -38,14 +46,13 @@ def parse_offer(user_input, memory):
     accepted = any(p in user_input_lower for p in accepted_phrases)
     declined = any(p in user_input_lower for p in decline_phrases)
 
-    # Check the previous AI message for any offered retention options using fuzzy matching
+    # Check the previous AI message for any offered retention options using keyword matching
     prior_message = memory[-2]["content"].lower() if len(memory) >= 2 else ""
     offered = None
-    for o in retention_offers:
-        # Fuzzy match: all words in the offer phrase must appear in the prior message
-        offer_words = o.lower().split()
-        if all(word in prior_message for word in offer_words):
-            offered = o
+
+    for offer, keywords in offer_keywords.items():
+        if all(any(k in prior_message for k in keywords) for k in keywords):
+            offered = offer
             break
 
     if accepted and offered:
