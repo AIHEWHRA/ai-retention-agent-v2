@@ -27,7 +27,6 @@ def collect_info():
         if len(combined) >= 10:
             state["phone"] = combined[:10]
             state["step"] = "done"
-            # FIX: Provide prompt when moving to retention loop
             return str(build_gather("Thank you. How can I help you today?", "/process-speech"))
         else:
             state["phone"] = combined
@@ -37,7 +36,6 @@ def collect_info():
             else:
                 state["phone"] = "Unknown"
                 state["step"] = "done"
-                # Proceed to process-speech with prompt even if phone is unknown
                 return str(build_gather("Thank you. How can I help you today?", "/process-speech"))
 
     customer_info[call_sid] = state
@@ -58,6 +56,10 @@ def process_speech():
     memory.append({"role": "assistant", "content": ai_response})
     session_memory[call_sid] = memory
 
+    # ✅ Log conversation to Railway
+    print(f"🗣️ User said: {user_input}")
+    print(f"🤖 AI replied: {ai_response}")
+
     outcome, offer_used, transcript = parse_offer(user_input, memory)
 
     info = customer_info.get(call_sid, {})
@@ -65,13 +67,16 @@ def process_speech():
     phone = info.get("phone", caller_number)
 
     if outcome:
-        send_to_zapier({
+        payload = {
             "name": name,
             "phone": phone,
             "offer": offer_used,
             "outcome": outcome,
             "transcript": transcript
-        })
+        }
+        print(f"📬 Sending to Zapier: {payload}")
+        send_to_zapier(payload)
+
         if outcome == "accepted":
             return str(build_hangup(f"Thanks {name}, I’ve confirmed your offer. We're happy to have you stay with us. Goodbye!"))
         else:
