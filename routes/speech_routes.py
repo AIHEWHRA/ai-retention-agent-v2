@@ -6,9 +6,21 @@ from services.openai_service import get_ai_response
 from services.zapier_service import send_to_zapier
 from models.session_store import session_memory, customer_info
 from logic.offer_parser import parse_offer
+import json
+import os
 import re
 
 speech_bp = Blueprint('speech_bp', __name__)
+
+# Load offers from JSON file
+current_dir = os.path.dirname(os.path.abspath(__file__))
+offers_file = os.path.join(current_dir, "..", "data", "retention_offers.json")
+with open(offers_file, "r") as f:
+    data = json.load(f)
+retention_offers = data["offers"]
+
+accepted_phrases = ["yes", "sounds good", "let’s do it", "i'll take it", "sure", "okay", "i accept", "i'll do that", "that works"]
+decline_phrases = ["no", "cancel", "still want to cancel", "go ahead with cancellation", "just cancel"]
 
 @speech_bp.route("/collect-info", methods=["POST"])
 def collect_info():
@@ -62,36 +74,47 @@ def process_speech():
     print(f"🗣️ User said: {user_input}")
     print(f"🤖 AI replied: {ai_response}")
 
-    outcome, offer_used, transcript = parse_offer(user_input, memory)
-
     info = customer_info.get(call_sid, {})
     name = info.get("name", "Unknown")
     phone = info.get("phone", caller_number)
 
-    # Only update if parse_offer returned something meaningful
-    if offer_used:
-        info["offer"] = offer_used
+    # Detect if the AI made an offer
+    for offer in retention_offers:
+        if offer.lower() in ai_response.lower():
+            info["pending_offer"] = offer
+            print(f"📝 Offer made: {offer}")
+            break
 
-    if outcome:
-        info["outcome"] = outcome
-        info["transcript"] = transcript
+    # Check for user response to pending offer
+    pending_offer = info.get("pending_offer")
+    if pending_offer:
+        if any(p in user_input.lower() for p in accepted_phrases):
+            info["offer"] = pending_offer
+            info["outcome"] = "accepted"
+            info["transcript"] = user_input
+            info.pop("pending_offer", None)
+        elif any(p in user_input.lower() for p in decline_phrases):
+            info["offer"] = pending_offer
+            info["outcome"] = "declined"
+            info["transcript"] = user_input
+            info.pop("pending_offer", None)
 
     customer_info[call_sid] = info
     print(f"📋 Updated Customer Info: {info}")
 
     # Fire Zapier only if outcome is set now
-    if outcome:
+    if info.get("outcome"):
         payload = {
             "name": name,
             "phone": phone,
             "offer": info.get("offer", "unknown"),
-            "outcome": outcome,
-            "transcript": transcript
+            "outcome": info.get("outcome"),
+            "transcript": info.get("transcript", "")
         }
         print(f"📬 Sending to Zapier: {payload}")
         send_to_zapier(payload)
 
-        if outcome == "accepted":
+        if info["outcome"] == "accepted":
             return str(build_hangup(f"Thanks {name}, I’ve confirmed your offer. We're happy to have you stay with us. Goodbye!"))
         else:
             return str(build_hangup("Understood. We'll proceed with your cancellation request. Goodbye!"))
