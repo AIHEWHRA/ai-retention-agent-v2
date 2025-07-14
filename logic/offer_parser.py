@@ -21,6 +21,15 @@ offer_keywords = {
     "50% off your next 2 billing cycles": ["50%", "half off"]
 }
 
+# Phrases that indicate offer intent in AI's response
+offer_intent_phrases = [
+    "would you be interested in",
+    "can i offer you",
+    "how about",
+    "i can pause your membership",
+    "to accommodate this"
+]
+
 # Phrases that count as acceptance
 accepted_phrases = ["yes", "sounds good", "let’s do it", "i'll take it", "sure", "okay", "i accept", "i'll do that", "that works"]
 
@@ -46,14 +55,15 @@ def parse_offer(user_input, memory):
     accepted = any(p in user_input_lower for p in accepted_phrases)
     declined = any(p in user_input_lower for p in decline_phrases)
 
-    # Check the previous AI message for any offered retention options using keyword matching
+    # Check the previous AI message for any offered retention options only if offer intent is detected
     prior_message = memory[-2]["content"].lower() if len(memory) >= 2 else ""
     offered = None
 
-    for offer, keywords in offer_keywords.items():
-        if all(any(k in prior_message for k in keywords) for k in keywords):
-            offered = offer
-            break
+    if any(phrase in prior_message for phrase in offer_intent_phrases):
+        for offer, keywords in offer_keywords.items():
+            if all(any(k in prior_message for k in keywords) for k in keywords):
+                offered = offer
+                break
 
     if accepted and offered:
         return "accepted", offered, f"User accepted offer: {offered}"
