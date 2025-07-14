@@ -22,6 +22,9 @@ retention_offers = data["offers"]
 accepted_phrases = ["yes", "sounds good", "let’s do it", "i'll take it", "sure", "okay", "i accept", "i'll do that", "that works"]
 decline_phrases = ["no", "cancel", "still want to cancel", "go ahead with cancellation", "just cancel"]
 
+def normalize_text(text):
+    return text.lower().replace("2", "two").replace("50%", "50 percent")
+
 @speech_bp.route("/collect-info", methods=["POST"])
 def collect_info():
     response_text = ""
@@ -78,9 +81,12 @@ def process_speech():
     name = info.get("name", "Unknown")
     phone = info.get("phone", caller_number)
 
-    # Detect if the AI made an offer
+    ai_response_normalized = normalize_text(ai_response)
+
+    # Detect if the AI made an offer with normalization
     for offer in retention_offers:
-        if offer.lower() in ai_response.lower():
+        offer_normalized = normalize_text(offer)
+        if offer_normalized in ai_response_normalized:
             info["pending_offer"] = offer
             print(f"📝 Offer made: {offer}")
             break
