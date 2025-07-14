@@ -27,8 +27,8 @@ def collect_info():
         if len(combined) >= 10:
             state["phone"] = combined[:10]
             state["step"] = "done"
-            # FIX: Do not ask "how can I help you" again, directly move to process-speech
-            return str(build_gather("", "/process-speech"))
+            # FIX: Provide prompt when moving to retention loop
+            return str(build_gather("Thank you. How can I help you today?", "/process-speech"))
         else:
             state["phone"] = combined
             if state["retry"] == 0:
@@ -37,8 +37,8 @@ def collect_info():
             else:
                 state["phone"] = "Unknown"
                 state["step"] = "done"
-                # Proceed to process-speech even if phone is unknown
-                return str(build_gather("", "/process-speech"))
+                # Proceed to process-speech with prompt even if phone is unknown
+                return str(build_gather("Thank you. How can I help you today?", "/process-speech"))
 
     customer_info[call_sid] = state
     return str(build_gather(response_text, "/collect-info"))
