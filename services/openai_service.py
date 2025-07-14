@@ -2,21 +2,25 @@
 
 from openai import OpenAI
 import os
+import json
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Load your approved retention offers from data if desired
-# For now, keeping the static list for clarity
-retention_offers_text = (
-    "1) Free month of service, 2) Downgrade membership, "
-    "3) Pause membership, 4) Apply credits."
-)
+# Load offers from JSON data file
+def load_retention_offers():
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    offers_file = os.path.join(current_dir, "..", "data", "retention_offers.json")
+    with open(offers_file, "r") as f:
+        data = json.load(f)
+    return data["offers"]
+
+retention_offers = load_retention_offers()
+offers_list_text = ", ".join(retention_offers)
 
 system_prompt = (
     "You are a helpful and persuasive AI retention assistant for Hurricane Express Wash. "
     "Start by asking why the customer wants to cancel. Listen carefully. "
-    "Once the reason is given, offer one of the following options if appropriate: "
-    + retention_offers_text + " "
+    f"Once the reason is given, offer one of the following options if appropriate: {offers_list_text}. "
     "Only offer options from this list. Never invent new offers. "
     "If a customer accepts an offer, confirm it and thank them. "
     "If they decline after being offered something, proceed with cancellation. "
