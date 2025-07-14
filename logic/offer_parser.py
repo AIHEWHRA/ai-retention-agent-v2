@@ -1,10 +1,24 @@
 # File: logic/offer_parser.py
 
-# List of available retention offers
-retention_offers = ["free month", "downgrade", "pause", "credits"]
+import json
+import os
+
+# Load offers from JSON data file
+def load_retention_offers():
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    offers_file = os.path.join(current_dir, "..", "data", "retention_offers.json")
+    with open(offers_file, "r") as f:
+        data = json.load(f)
+    return data["offers"]
+
+retention_offers = load_retention_offers()
 
 # Phrases that count as acceptance
-accepted_phrases = ["yes", "sounds good", "let’s do it", "i'll take it", "sure", "okay"]
+accepted_phrases = ["yes", "sounds good", "let’s do it", "i'll take it", "sure", "okay", "i accept", "i'll do that", "that works"]
+
+# Phrases that count as decline
+decline_phrases = ["no", "cancel", "still want to cancel", "go ahead with cancellation", "just cancel"]
+
 
 def parse_offer(user_input, memory):
     """
@@ -19,23 +33,26 @@ def parse_offer(user_input, memory):
         offer_used (str or None): The specific offer mentioned, or 'unknown'.
         transcript (str or None): The relevant transcript snippet.
     """
+    user_input_lower = user_input.lower()
 
-    # Check if the user accepted an offer
-    accepted = any(p in user_input.lower() for p in accepted_phrases)
+    accepted = any(p in user_input_lower for p in accepted_phrases)
+    declined = any(p in user_input_lower for p in decline_phrases)
 
-    # Check the previous AI message for offers
-    prior = memory[-2]["content"].lower() if len(memory) >= 2 else ""
-    offered = any(o in prior for o in retention_offers)
-    offer_used = next((o for o in retention_offers if o in prior), "unknown")
+    # Check the previous AI message for any offered retention options
+    prior_message = memory[-2]["content"].lower() if len(memory) >= 2 else ""
+    offered = None
+    for o in retention_offers:
+        if o.lower() in prior_message:
+            offered = o
+            break
 
-    # If an offer was made and user accepted
+    # If the user accepted an offer that was presented
     if accepted and offered:
-        return "accepted", offer_used, f"User accepted offer: {offer_used}"
+        return "accepted", offered, f"User accepted offer: {offered}"
 
-    # If user said 'cancel' but no offer was made, DO NOT trigger decline yet
-    # Only allow decline if an offer was actually presented
-    elif "cancel" in user_input.lower() and offered:
-        return "declined", offer_used, user_input
+    # If the user declined after an offer was presented
+    if declined and offered:
+        return "declined", offered, user_input
 
-    # No final outcome yet; keep conversation going
+    # If the user said cancel but no offer was made yet, return None to keep conversation going
     return None, None, None
