@@ -1,3 +1,5 @@
+# File: routes/speech_routes.py
+
 from flask import Blueprint, request
 from services.twilio_response import build_gather, build_hangup
 from services.openai_service import get_ai_response
@@ -62,24 +64,27 @@ def process_speech():
 
     outcome, offer_used, transcript = parse_offer(user_input, memory)
 
-    # Get or initialize customer info
     info = customer_info.get(call_sid, {})
     name = info.get("name", "Unknown")
     phone = info.get("phone", caller_number)
 
-    # Store outcome details in customer_info for later Zapier call
-    info["offer"] = offer_used
-    info["outcome"] = outcome
-    info["transcript"] = transcript
-    customer_info[call_sid] = info
+    # Only update if parse_offer returned something meaningful
+    if offer_used:
+        info["offer"] = offer_used
 
+    if outcome:
+        info["outcome"] = outcome
+        info["transcript"] = transcript
+
+    customer_info[call_sid] = info
     print(f"📋 Updated Customer Info: {info}")
 
+    # Fire Zapier only if outcome is set now
     if outcome:
         payload = {
             "name": name,
             "phone": phone,
-            "offer": offer_used,
+            "offer": info.get("offer", "unknown"),
             "outcome": outcome,
             "transcript": transcript
         }
