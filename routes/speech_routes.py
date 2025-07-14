@@ -107,9 +107,10 @@ def process_speech():
         payload = {
             "name": name,
             "phone": phone,
-            "offer": info.get("offer", "unknown"),
+            "email": info.get("email", "Not provided"),
+            "offer_presented": info.get("offer", "Not captured"),
             "outcome": info.get("outcome"),
-            "transcript": info.get("transcript", "")
+            "transcript": info.get("transcript", "No transcript available")
         }
         print(f"📬 Sending to Zapier: {payload}")
         send_to_zapier(payload)
