@@ -38,21 +38,20 @@ def parse_offer(user_input, memory):
     accepted = any(p in user_input_lower for p in accepted_phrases)
     declined = any(p in user_input_lower for p in decline_phrases)
 
-    # Check the previous AI message for any offered retention options
+    # Check the previous AI message for any offered retention options using fuzzy matching
     prior_message = memory[-2]["content"].lower() if len(memory) >= 2 else ""
     offered = None
     for o in retention_offers:
-        if o.lower() in prior_message:
+        # Fuzzy match: all words in the offer phrase must appear in the prior message
+        offer_words = o.lower().split()
+        if all(word in prior_message for word in offer_words):
             offered = o
             break
 
-    # If the user accepted an offer that was presented
     if accepted and offered:
         return "accepted", offered, f"User accepted offer: {offered}"
 
-    # If the user declined after an offer was presented
     if declined and offered:
         return "declined", offered, user_input
 
-    # If the user said cancel but no offer was made yet, return None to keep conversation going
     return None, None, None
