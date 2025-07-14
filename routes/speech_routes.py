@@ -1,3 +1,5 @@
+# File: routes/speech_routes.py
+
 from flask import Blueprint, request
 from services.twilio_response import build_gather, build_hangup
 from services.openai_service import get_ai_response
@@ -39,7 +41,9 @@ def collect_info():
                 response_text = "Thanks! We'll continue anyway. How can I help you today?"
 
     elif state["step"] == "done":
-        return str(build_gather("", "/process-speech"))
+        # FIX: Provide an actual prompt here to prevent silent gather
+        prompt = "Thank you. How can I help you today?"
+        return str(build_gather(prompt, "/process-speech"))
 
     customer_info[call_sid] = state
     return str(build_gather(response_text, "/collect-info"))
