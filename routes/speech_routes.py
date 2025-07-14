@@ -41,7 +41,6 @@ def collect_info():
                 response_text = "Thanks! We'll continue anyway. How can I help you today?"
 
     elif state["step"] == "done":
-        # FIX: Provide an actual prompt here to prevent silent gather
         prompt = "Thank you. How can I help you today?"
         return str(build_gather(prompt, "/process-speech"))
 
@@ -54,8 +53,9 @@ def process_speech():
     user_input = request.form.get("SpeechResult", "").strip()
     caller_number = request.form.get("From")
 
+    # FIX: Handle silence gracefully instead of hanging up
     if not user_input:
-        return str(build_hangup("I’m sorry, I didn’t catch that."))
+        return str(build_gather("I'm sorry, I didn't catch that. How can I help you today?", "/process-speech"))
 
     memory = session_memory.get(call_sid, [])
     memory.append({"role": "user", "content": user_input})
