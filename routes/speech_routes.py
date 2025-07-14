@@ -39,6 +39,7 @@ def collect_info():
                 return str(build_gather("Thank you. How can I help you today?", "/process-speech"))
 
     customer_info[call_sid] = state
+    print(f"📇 Captured Customer Info: {state}")
     return str(build_gather(response_text, "/collect-info"))
 
 @speech_bp.route("/process-speech", methods=["POST"])
@@ -56,15 +57,23 @@ def process_speech():
     memory.append({"role": "assistant", "content": ai_response})
     session_memory[call_sid] = memory
 
-    # ✅ Log conversation to Railway
     print(f"🗣️ User said: {user_input}")
     print(f"🤖 AI replied: {ai_response}")
 
     outcome, offer_used, transcript = parse_offer(user_input, memory)
 
+    # Get or initialize customer info
     info = customer_info.get(call_sid, {})
     name = info.get("name", "Unknown")
     phone = info.get("phone", caller_number)
+
+    # Store outcome details in customer_info for later Zapier call
+    info["offer"] = offer_used
+    info["outcome"] = outcome
+    info["transcript"] = transcript
+    customer_info[call_sid] = info
+
+    print(f"📋 Updated Customer Info: {info}")
 
     if outcome:
         payload = {
@@ -83,3 +92,4 @@ def process_speech():
             return str(build_hangup("Understood. We'll proceed with your cancellation request. Goodbye!"))
 
     return str(build_gather(ai_response, "/process-speech"))
+
