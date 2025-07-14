@@ -61,4 +61,8 @@ def parse_offer(user_input, memory):
     if declined and offered:
         return "declined", offered, user_input
 
+    # If the user declines but no offer has been made yet, continue the conversation (ask why they're canceling)
+    if declined and not offered:
+        return None, None, None
+
     return None, None, None
