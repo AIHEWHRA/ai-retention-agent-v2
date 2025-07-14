@@ -1,5 +1,3 @@
-# File: routes/speech_routes.py
-
 from flask import Blueprint, request
 from services.twilio_response import build_gather, build_hangup
 from services.openai_service import get_ai_response
@@ -29,7 +27,8 @@ def collect_info():
         if len(combined) >= 10:
             state["phone"] = combined[:10]
             state["step"] = "done"
-            response_text = "Thanks! How can I help you today?"
+            # FIX: Do not ask "how can I help you" again, directly move to process-speech
+            return str(build_gather("", "/process-speech"))
         else:
             state["phone"] = combined
             if state["retry"] == 0:
@@ -38,11 +37,8 @@ def collect_info():
             else:
                 state["phone"] = "Unknown"
                 state["step"] = "done"
-                response_text = "Thanks! We'll continue anyway. How can I help you today?"
-
-    elif state["step"] == "done":
-        prompt = "Thank you. How can I help you today?"
-        return str(build_gather(prompt, "/process-speech"))
+                # Proceed to process-speech even if phone is unknown
+                return str(build_gather("", "/process-speech"))
 
     customer_info[call_sid] = state
     return str(build_gather(response_text, "/collect-info"))
@@ -53,7 +49,6 @@ def process_speech():
     user_input = request.form.get("SpeechResult", "").strip()
     caller_number = request.form.get("From")
 
-    # FIX: Handle silence gracefully instead of hanging up
     if not user_input:
         return str(build_gather("I'm sorry, I didn't catch that. How can I help you today?", "/process-speech"))
 
