@@ -26,6 +26,11 @@ noise_phrases = [
     "typing", "unintelligible", "noise", "unknown speech", ""
 ]
 
+# Intent keywords
+cancel_keywords = ["cancel", "stop membership", "end my membership", "terminate membership"]
+location_keywords = ["location", "closest", "near me", "address"]
+faq_keywords = ["how do i", "app help", "faq", "troubleshoot", "support", "mobile app"]
+
 def normalize_text(text):
     return text.lower().replace("2", "two").replace("50%", "50 percent")
 
@@ -75,6 +80,22 @@ def process_speech():
         print("🔇 Detected background noise or non-speech, reprompting user.")
         return str(build_gather("I'm sorry, I didn't catch that. How can I help you today?", "/process-speech"))
 
+    info = customer_info.get(call_sid, {})
+    name = info.get("name", "Unknown")
+    phone = info.get("phone", caller_number)
+
+    # Intent detection
+    if any(k in user_input_lower for k in cancel_keywords):
+        print("🔍 Detected cancellation intent.")
+    elif any(k in user_input_lower for k in location_keywords):
+        print("📍 Detected location inquiry.")
+        return str(build_gather("Sure! You can find our nearest location by visiting our website or mobile app. Is there anything else I can help you with?", "/process-speech"))
+    elif any(k in user_input_lower for k in faq_keywords):
+        print("📖 Detected FAQ inquiry.")
+        return str(build_gather("I'd be happy to help with that! You can access our mobile app FAQs in the app under 'Help' or on our website. Is there anything else I can assist you with?", "/process-speech"))
+    else:
+        print("💬 General inquiry detected, continuing with GPT conversation.")
+
     memory = session_memory.get(call_sid, [])
     memory.append({"role": "user", "content": user_input})
     ai_response = get_ai_response(memory)
@@ -83,10 +104,6 @@ def process_speech():
 
     print(f"🗣️ User said: {user_input}")
     print(f"🤖 AI replied: {ai_response}")
-
-    info = customer_info.get(call_sid, {})
-    name = info.get("name", "Unknown")
-    phone = info.get("phone", caller_number)
 
     ai_response_normalized = normalize_text(ai_response)
 
