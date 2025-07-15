@@ -104,6 +104,10 @@ def process_speech():
             info["outcome"] = "declined"
             info["transcript"] = user_input
             info.pop("pending_offer", None)
+    else:
+        # No pending offer, continue the conversation without setting outcome
+        customer_info[call_sid] = info
+        return str(build_gather(ai_response, "/process-speech"))
 
     customer_info[call_sid] = info
     print(f"📋 Updated Customer Info: {info}")
