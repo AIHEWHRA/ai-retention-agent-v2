@@ -21,6 +21,10 @@ retention_offers = data["offers"]
 
 accepted_phrases = ["yes", "sounds good", "let’s do it", "i'll take it", "sure", "okay", "i accept", "i'll do that", "that works"]
 decline_phrases = ["no", "cancel", "still want to cancel", "go ahead with cancellation", "just cancel"]
+noise_phrases = [
+    "clears throat", "cough", "paper rustling", "background noise", 
+    "typing", "unintelligible", "noise", "unknown speech", ""
+]
 
 def normalize_text(text):
     return text.lower().replace("2", "two").replace("50%", "50 percent")
@@ -65,7 +69,10 @@ def process_speech():
     user_input = request.form.get("SpeechResult", "").strip()
     caller_number = request.form.get("From")
 
-    if not user_input:
+    user_input_lower = user_input.lower()
+
+    if user_input_lower in noise_phrases or user_input_lower.strip() == "":
+        print("🔇 Detected background noise or non-speech, reprompting user.")
         return str(build_gather("I'm sorry, I didn't catch that. How can I help you today?", "/process-speech"))
 
     memory = session_memory.get(call_sid, [])
@@ -94,12 +101,12 @@ def process_speech():
     # Check for user response to pending offer
     pending_offer = info.get("pending_offer")
     if pending_offer:
-        if any(p in user_input.lower() for p in accepted_phrases):
+        if any(p in user_input_lower for p in accepted_phrases):
             info["offer"] = pending_offer
             info["outcome"] = "accepted"
             info["transcript"] = user_input
             info.pop("pending_offer", None)
-        elif any(p in user_input.lower() for p in decline_phrases):
+        elif any(p in user_input_lower for p in decline_phrases):
             info["offer"] = pending_offer
             info["outcome"] = "declined"
             info["transcript"] = user_input
@@ -131,5 +138,3 @@ def process_speech():
             return str(build_hangup("Understood. We'll proceed with your cancellation request. Goodbye!"))
 
     return str(build_gather(ai_response, "/process-speech"))
-    
-
