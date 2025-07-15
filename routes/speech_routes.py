@@ -133,7 +133,7 @@ def process_speech():
         send_to_zapier(payload)
 
         if info["outcome"] == "accepted":
-            return str(build_hangup(f"Thanks {name}, I’ve confirmed your offer. We're happy to have you stay with us. Goodbye!"))
+            return str(build_gather(f"Thanks {name}, I’ve confirmed your offer. Is there anything else I can help you with today?", "/process-speech"))
         else:
             return str(build_hangup("Understood. We'll proceed with your cancellation request. Goodbye!"))
 
