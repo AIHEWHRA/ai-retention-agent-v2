@@ -1,5 +1,3 @@
-# File: routes/speech_routes.py
-
 from flask import Blueprint, request
 from services.twilio_response import build_gather, build_hangup
 from services.openai_service import get_structured_ai_response
@@ -118,7 +116,6 @@ def process_speech():
 
     session_memory[call_sid] = history
 
-    # Decide if conversation is done
     if outcome in ["accepted", "declined", "cancellation processed"]:
         summary_dict = {
             "offer": offer,
@@ -126,9 +123,7 @@ def process_speech():
             "transcript": transcript
         }
         send_to_zapier(summary_dict)
-
         return str(build_hangup("Thank you for your time today. Goodbye."))
 
     else:
-        # Continue the conversation
         return str(build_gather(reply, "/process-speech"))
