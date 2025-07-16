@@ -49,10 +49,11 @@ def collect_info():
         incoming_phone = request.form.get("From").replace("+1", "")
         user_lookup = find_user_by_phone(incoming_phone)
 
-        if user_lookup and len(user_lookup) > 0:
+        if user_lookup and isinstance(user_lookup, list) and len(user_lookup) > 0:
+            user = user_lookup[0]
             state["verified"] = True
-            state["user_id"] = user_lookup[0]["id"]
-            state["name"] = user_lookup[0].get("name", "there")
+            state["user_id"] = user.get("id")
+            state["name"] = user.get("name", "there")
             state["step"] = "done"
             customer_info[call_sid] = state
             greeting = f"Hey {state['name']}, thank you for calling in today. How can we help you?"
@@ -81,10 +82,11 @@ def collect_info():
         new_digits = re.sub(r"\D", "", speech)
         if len(new_digits) == 10:
             user_lookup = find_user_by_phone(new_digits)
-            if user_lookup and len(user_lookup) > 0:
+            if user_lookup and isinstance(user_lookup, list) and len(user_lookup) > 0:
+                user = user_lookup[0]
                 state["verified"] = True
-                state["user_id"] = user_lookup[0]["id"]
-                state["name"] = user_lookup[0].get("name", "there")
+                state["user_id"] = user.get("id")
+                state["name"] = user.get("name", "there")
                 state["step"] = "done"
                 customer_info[call_sid] = state
                 greeting = f"Hey {state['name']}, thank you for calling in today. How can we help you?"
