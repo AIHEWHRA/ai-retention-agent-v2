@@ -121,29 +121,38 @@ def process_speech():
     ai_response = get_ai_response(history)
     history.append({"role": "assistant", "content": ai_response})
 
-    # Summarize for Zapier in a new thread
-    conversation_text = "\n".join([f"{m['role']}: {m['content']}" for m in history])
-    summary_prompt = [{
-        "role": "user",
-        "content": "Please summarize the following conversation as JSON with keys: offer, outcome, transcript. Only respond with valid JSON, no extra text.\n\n" + conversation_text
-    }]
-
-    summary_response = get_ai_response(summary_prompt)
-
-    try:
-        summary_dict = json.loads(summary_response)
-        send_to_zapier(summary_dict)
-    except Exception as e:
-        print("❌ JSON parsing error:", e)
-        print("Raw summary response:", summary_response)
-
-        fallback_summary = {
-            "offer": "unknown",
-            "outcome": "unknown",
-            "transcript": conversation_text
-        }
-        send_to_zapier(fallback_summary)
-
     session_memory[call_sid] = history
 
-    return str(build_gather(ai_response, "/process-speech"))
+    # Decide if conversation is done
+    if any(phrase in speech.lower() for phrase in [
+        "yes i'll take it", "i accept the offer", "go ahead and cancel", "yes cancel", 
+        "no i still want to cancel", "i decline the offer"]):
+
+        # Conversation end - summarize and send to Zapier
+        conversation_text = "\n".join([f"{m['role']}: {m['content']}" for m in history])
+        summary_prompt = [{
+            "role": "user",
+            "content": "Please summarize the following conversation as JSON with keys: offer, outcome, transcript. Only respond with raw JSON, no extra text, no markdown.\n\n" + conversation_text
+        }]
+
+        summary_response = get_ai_response(summary_prompt)
+
+        try:
+            summary_dict = json.loads(summary_response)
+            send_to_zapier(summary_dict)
+        except Exception as e:
+            print("❌ JSON parsing error:", e)
+            print("Raw summary response:", summary_response)
+
+            fallback_summary = {
+                "offer": "unknown",
+                "outcome": "unknown",
+                "transcript": conversation_text
+            }
+            send_to_zapier(fallback_summary)
+
+        return str(build_hangup("Thank you for your time today. Goodbye."))
+
+    else:
+        # Continue the conversation
+        return str(build_gather(ai_response, "/process-speech"))
