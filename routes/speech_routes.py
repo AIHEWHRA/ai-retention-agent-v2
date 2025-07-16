@@ -49,12 +49,13 @@ def collect_info():
             state["verified"] = True
             state["user_id"] = user_lookup["users"][0]["user_id"]
             state["step"] = "done"
+            customer_info[call_sid] = state
             return str(build_gather("Thank you. How can I help you today?", "/process-speech"))
         else:
             state["verified"] = False
             state["step"] = "mobile_app_check"
-            response_text = "Are you a Hurricane Express mobile app user? Please say yes or no."
             customer_info[call_sid] = state
+            response_text = "Are you a Hurricane Express mobile app user? Please say yes or no."
             return str(build_gather(response_text, "/collect-info"))
 
     elif state["step"] == "mobile_app_check":
@@ -78,6 +79,7 @@ def collect_info():
                 state["verified"] = True
                 state["user_id"] = user_lookup["users"][0]["user_id"]
                 state["step"] = "done"
+                customer_info[call_sid] = state
                 return str(build_gather("Thank you. How can I help you today?", "/process-speech"))
             else:
                 state["retry"] += 1
@@ -104,12 +106,12 @@ def collect_info():
         if len(new_digits) == 10:
             state["phone"] = new_digits
             state["step"] = "done"
+            customer_info[call_sid] = state
             return str(build_gather("Thank you. How can I help you today?", "/process-speech"))
         else:
             response_text = "That didn't sound like a 10-digit phone number. Please say it again."
             customer_info[call_sid] = state
             return str(build_gather(response_text, "/collect-info"))
-
 
     customer_info[call_sid] = state
     return str(build_gather("I'm sorry, I didn't catch that. Could you please repeat?", "/collect-info"))
