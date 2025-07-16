@@ -125,3 +125,13 @@ def collect_info():
 
     customer_info[call_sid] = state
     return str(build_gather("I'm sorry, I didn't catch that. Could you please repeat?", "/collect-info"))
+
+@speech_bp.route("/process-speech", methods=["POST"])
+def process_speech():
+    call_sid = request.form.get("CallSid")
+    speech = request.form.get("SpeechResult", "").strip()
+
+    # Simple test response to confirm route is working
+    reply = f"You said: {speech}. We will assist you shortly."
+
+    return str(build_gather(reply, "/process-speech"))
