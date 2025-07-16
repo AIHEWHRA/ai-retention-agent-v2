@@ -8,7 +8,10 @@ client = AMPApiClient()
 def find_user_by_phone(phone_number):
     path = "/api/get-users-by-phone"
     data = {"phone": phone_number}
-    return client.tenant_post(path, data)
+    print(f"🔍 Sending AMP lookup for phone: {phone_number}")
+    result = client.tenant_post(path, data)
+    print(f"🔍 AMP Response: {result}")
+    return result
 
 # Pause membership using impersonation
 def pause_membership(user_id):
