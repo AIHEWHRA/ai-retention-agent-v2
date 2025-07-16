@@ -49,9 +49,9 @@ def collect_info():
         incoming_phone = request.form.get("From").replace("+1", "")
         user_lookup = find_user_by_phone(incoming_phone)
 
-        if user_lookup and len(user_lookup.get("users", [])) > 0:
+        if user_lookup and len(user_lookup) > 0:
             state["verified"] = True
-            state["user_id"] = user_lookup["users"][0]["user_id"]
+            state["user_id"] = user_lookup[0]["user_id"]
             state["step"] = "done"
             customer_info[call_sid] = state
             return str(build_gather("Thank you. How can I help you today?", "/process-speech"))
@@ -79,9 +79,9 @@ def collect_info():
         new_digits = re.sub(r"\D", "", speech)
         if len(new_digits) == 10:
             user_lookup = find_user_by_phone(new_digits)
-            if user_lookup and len(user_lookup.get("users", [])) > 0:
+            if user_lookup and len(user_lookup) > 0:
                 state["verified"] = True
-                state["user_id"] = user_lookup["users"][0]["user_id"]
+                state["user_id"] = user_lookup[0]["user_id"]
                 state["step"] = "done"
                 customer_info[call_sid] = state
                 return str(build_gather("Thank you. How can I help you today?", "/process-speech"))
