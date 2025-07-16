@@ -6,30 +6,14 @@ from services.openai_service import get_ai_response
 from services.zapier_service import send_to_zapier
 from models.session_store import session_memory, customer_info
 from services.account_service import find_user_by_phone
-from logic.offer_parser import parse_offer
-import json
-import os
 import re
 
 speech_bp = Blueprint('speech_bp', __name__)
 
-# Load offers from JSON file
-current_dir = os.path.dirname(os.path.abspath(__file__))
-offers_file = os.path.join(current_dir, "..", "data", "retention_offers.json")
-with open(offers_file, "r") as f:
-    data = json.load(f)
-retention_offers = data["offers"]
-
 accepted_phrases = ["yes", "sounds good", "let’s do it", "i'll take it", "sure", "okay", "i accept", "i'll do that", "that works"]
 decline_phrases = ["no", "cancel", "still want to cancel", "go ahead with cancellation", "just cancel"]
-noise_phrases = [
-    "clears throat", "cough", "paper rustling", "background noise", 
-    "typing", "unintelligible", "noise", "unknown speech", ""
-]
 
 cancel_keywords = ["cancel", "stop membership", "end my membership", "terminate membership"]
-location_keywords = ["location", "closest", "near me", "address"]
-faq_keywords = ["how do i", "app help", "faq", "troubleshoot", "support", "mobile app"]
 
 def normalize_text(text):
     return text.lower().replace("2", "two").replace("50%", "50 percent")
@@ -132,30 +116,6 @@ def process_speech():
     info = customer_info.get(call_sid, {})
 
     history.append({"role": "user", "content": speech})
-
-    text = normalize_text(speech)
-    offer_detected = parse_offer(text, retention_offers)
-
-    if any(keyword in text for keyword in cancel_keywords):
-        reply = "I'm sorry to hear you'd like to cancel. Can you share why you're thinking about it?"
-        history.append({"role": "assistant", "content": reply})
-        session_memory[call_sid] = history
-        return str(build_gather(reply, "/process-speech"))
-
-    if offer_detected:
-        info["offer"] = offer_detected
-        if any(phrase in text for phrase in accepted_phrases):
-            info["outcome"] = "accepted"
-            info["transcript"] = speech
-            send_to_zapier(info)
-            session_memory[call_sid] = history
-            return str(build_hangup(f"Great! We've applied the {offer_detected} to your account. Thank you for staying with us."))
-        elif any(phrase in text for phrase in decline_phrases):
-            info["outcome"] = "declined"
-            info["transcript"] = speech
-            send_to_zapier(info)
-            session_memory[call_sid] = history
-            return str(build_hangup("Understood. We've processed your cancellation. Goodbye."))
 
     ai_response = get_ai_response(history)
     history.append({"role": "assistant", "content": ai_response})
