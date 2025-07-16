@@ -5,6 +5,7 @@ from services.twilio_response import build_gather, build_hangup
 from services.openai_service import get_ai_response
 from services.zapier_service import send_to_zapier
 from models.session_store import session_memory, customer_info
+from services.account_service import find_user_by_phone
 from logic.offer_parser import parse_offer
 import json
 import os
@@ -26,132 +27,89 @@ noise_phrases = [
     "typing", "unintelligible", "noise", "unknown speech", ""
 ]
 
-# Intent keywords
 cancel_keywords = ["cancel", "stop membership", "end my membership", "terminate membership"]
 location_keywords = ["location", "closest", "near me", "address"]
 faq_keywords = ["how do i", "app help", "faq", "troubleshoot", "support", "mobile app"]
+
 
 def normalize_text(text):
     return text.lower().replace("2", "two").replace("50%", "50 percent")
 
 @speech_bp.route("/collect-info", methods=["POST"])
 def collect_info():
-    response_text = ""
     call_sid = request.form.get("CallSid")
     speech = request.form.get("SpeechResult", "").strip()
-    state = customer_info.get(call_sid, {"step": "name", "retry": 0})
+    state = customer_info.get(call_sid, {"step": "verify", "retry": 0})
 
-    if state["step"] == "name":
-        state["name"] = speech
-        state["step"] = "phone"
-        response_text = "Thank you. Now please provide the 10-digit phone number associated with your account."
+    if state["step"] == "verify":
+        incoming_phone = request.form.get("From").replace("+1", "")
+        user_lookup = find_user_by_phone(incoming_phone)
 
-    elif state["step"] == "phone":
-        new_digits = re.sub(r"\D", "", speech)
-        prior_digits = state.get("phone", "")
-        combined = prior_digits + new_digits
-        if len(combined) >= 10:
-            state["phone"] = combined[:10]
+        if user_lookup and len(user_lookup.get("users", [])) > 0:
+            state["verified"] = True
+            state["user_id"] = user_lookup["users"][0]["user_id"]
             state["step"] = "done"
             return str(build_gather("Thank you. How can I help you today?", "/process-speech"))
         else:
-            state["phone"] = combined
-            if state["retry"] == 0:
-                state["retry"] += 1
-                response_text = "I didn't quite get the full phone number. Please repeat your 10-digit phone number."
-            else:
-                state["phone"] = "Unknown"
+            state["verified"] = False
+            state["step"] = "mobile_app_check"
+            response_text = "Are you a Hurricane Express mobile app user? Please say yes or no."
+            customer_info[call_sid] = state
+            return str(build_gather(response_text, "/collect-info"))
+
+    elif state["step"] == "mobile_app_check":
+        if "yes" in speech.lower():
+            state["step"] = "collect_phone"
+            response_text = "Please say the 10-digit phone number associated with your mobile app account."
+        elif "no" in speech.lower():
+            state["step"] = "collect_name"
+            response_text = "No problem. Let's get your info. Please say your first and last name."
+        else:
+            response_text = "I didn't catch that. Are you a mobile app user? Please say yes or no."
+
+        customer_info[call_sid] = state
+        return str(build_gather(response_text, "/collect-info"))
+
+    elif state["step"] == "collect_phone":
+        new_digits = re.sub(r"\D", "", speech)
+        if len(new_digits) == 10:
+            user_lookup = find_user_by_phone(new_digits)
+            if user_lookup and len(user_lookup.get("users", [])) > 0:
+                state["verified"] = True
+                state["user_id"] = user_lookup["users"][0]["user_id"]
                 state["step"] = "done"
                 return str(build_gather("Thank you. How can I help you today?", "/process-speech"))
+            else:
+                state["retry"] += 1
+                if state["retry"] >= 2:
+                    state["step"] = "collect_name"
+                    response_text = "We couldn't find your account. Please say your first and last name."
+                else:
+                    response_text = "I couldn't find that phone number. Please say your 10-digit mobile app phone number again."
+        else:
+            response_text = "That didn't sound like a 10-digit phone number. Please say it again."
+
+        customer_info[call_sid] = state
+        return str(build_gather(response_text, "/collect-info"))
+
+    elif state["step"] == "collect_name":
+        state["name"] = speech
+        state["step"] = "collect_manual_phone"
+        response_text = "Thank you. Please say your 10-digit phone number."
+        customer_info[call_sid] = state
+        return str(build_gather(response_text, "/collect-info"))
+
+    elif state["step"] == "collect_manual_phone":
+        new_digits = re.sub(r"\D", "", speech)
+        if len(new_digits) == 10:
+            state["phone"] = new_digits
+            state["step"] = "done"
+            return str(build_gather("Thank you. How can I help you today?", "/process-speech"))
+        else:
+            response_text = "That didn't sound like a 10-digit phone number. Please say it again."
+            customer_info[call_sid] = state
+            return str(build_gather(response_text, "/collect-info"))
+
 
     customer_info[call_sid] = state
-    print(f"📇 Captured Customer Info: {state}")
-    return str(build_gather(response_text, "/collect-info"))
-
-@speech_bp.route("/process-speech", methods=["POST"])
-def process_speech():
-    call_sid = request.form.get("CallSid")
-    user_input = request.form.get("SpeechResult", "").strip()
-    caller_number = request.form.get("From")
-
-    user_input_lower = user_input.lower()
-
-    if user_input_lower in noise_phrases or user_input_lower.strip() == "":
-        print("🔇 Detected background noise or non-speech, reprompting user.")
-        return str(build_gather("I'm sorry, I didn't catch that. How can I help you today?", "/process-speech"))
-
-    info = customer_info.get(call_sid, {})
-    name = info.get("name", "Unknown")
-    phone = info.get("phone", caller_number)
-
-    # Intent detection
-    if any(k in user_input_lower for k in cancel_keywords):
-        print("🔍 Detected cancellation intent.")
-    elif any(k in user_input_lower for k in location_keywords):
-        print("📍 Detected location inquiry.")
-        return str(build_gather("Sure! You can find our nearest location by visiting our website or mobile app. Is there anything else I can help you with?", "/process-speech"))
-    elif any(k in user_input_lower for k in faq_keywords):
-        print("📖 Detected FAQ inquiry.")
-        return str(build_gather("I'd be happy to help with that! You can access our mobile app FAQs in the app under 'Help' or on our website. Is there anything else I can assist you with?", "/process-speech"))
-    else:
-        print("💬 General inquiry detected, continuing with GPT conversation.")
-
-    memory = session_memory.get(call_sid, [])
-    memory.append({"role": "user", "content": user_input})
-    ai_response = get_ai_response(memory)
-    memory.append({"role": "assistant", "content": ai_response})
-    session_memory[call_sid] = memory
-
-    print(f"🗣️ User said: {user_input}")
-    print(f"🤖 AI replied: {ai_response}")
-
-    ai_response_normalized = normalize_text(ai_response)
-
-    # Detect if the AI made an offer with normalization
-    for offer in retention_offers:
-        offer_normalized = normalize_text(offer)
-        if offer_normalized in ai_response_normalized:
-            info["pending_offer"] = offer
-            print(f"📝 Offer made: {offer}")
-            break
-
-    # Check for user response to pending offer
-    pending_offer = info.get("pending_offer")
-    if pending_offer:
-        if any(p in user_input_lower for p in accepted_phrases):
-            info["offer"] = pending_offer
-            info["outcome"] = "accepted"
-            info["transcript"] = user_input
-            info.pop("pending_offer", None)
-        elif any(p in user_input_lower for p in decline_phrases):
-            info["offer"] = pending_offer
-            info["outcome"] = "declined"
-            info["transcript"] = user_input
-            info.pop("pending_offer", None)
-    else:
-        # No pending offer, continue the conversation without setting outcome
-        customer_info[call_sid] = info
-        return str(build_gather(ai_response, "/process-speech"))
-
-    customer_info[call_sid] = info
-    print(f"📋 Updated Customer Info: {info}")
-
-    # Fire Zapier only if outcome is set now
-    if info.get("outcome"):
-        payload = {
-            "name": name,
-            "phone": phone,
-            "email": info.get("email", "Not provided"),
-            "offer_presented": info.get("offer", "Not captured"),
-            "outcome": info.get("outcome"),
-            "transcript": info.get("transcript", "No transcript available")
-        }
-        print(f"📬 Sending to Zapier: {payload}")
-        send_to_zapier(payload)
-
-        if info["outcome"] == "accepted":
-            return str(build_gather(f"Thanks {name}, I’ve confirmed your offer. Is there anything else I can help you with today?", "/process-speech"))
-        else:
-            return str(build_hangup("Understood. We'll proceed with your cancellation request. Goodbye!"))
-
-    return str(build_gather(ai_response, "/process-speech"))
+    return str(build_gather("I'm sorry, I didn't catch that. Could you please repeat?", "/collect-info"))
