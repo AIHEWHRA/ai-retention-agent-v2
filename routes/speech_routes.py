@@ -31,7 +31,6 @@ cancel_keywords = ["cancel", "stop membership", "end my membership", "terminate 
 location_keywords = ["location", "closest", "near me", "address"]
 faq_keywords = ["how do i", "app help", "faq", "troubleshoot", "support", "mobile app"]
 
-
 def normalize_text(text):
     return text.lower().replace("2", "two").replace("50%", "50 percent")
 
@@ -39,9 +38,7 @@ def normalize_text(text):
 def collect_info():
     call_sid = request.form.get("CallSid")
 
-    # Always reset for new calls to avoid stuck states
     customer_info[call_sid] = {"step": "verify", "retry": 0}
-
     state = customer_info[call_sid]
     speech = request.form.get("SpeechResult", "").strip()
 
@@ -131,25 +128,20 @@ def process_speech():
     call_sid = request.form.get("CallSid")
     speech = request.form.get("SpeechResult", "").strip()
 
-    # Retrieve session state
     history = session_memory.get(call_sid, [])
     info = customer_info.get(call_sid, {})
 
-    # Add user input to history
     history.append({"role": "user", "content": speech})
 
-    # Determine intent
     text = normalize_text(speech)
     offer_detected = parse_offer(text, retention_offers)
 
-    # Check if it's a cancellation request
     if any(keyword in text for keyword in cancel_keywords):
         reply = "I'm sorry to hear you'd like to cancel. Can you share why you're thinking about it?"
         history.append({"role": "assistant", "content": reply})
         session_memory[call_sid] = history
         return str(build_gather(reply, "/process-speech"))
 
-    # Handle retention offer acceptance or decline
     if offer_detected:
         info["offer"] = offer_detected
         if any(phrase in text for phrase in accepted_phrases):
@@ -165,11 +157,9 @@ def process_speech():
             session_memory[call_sid] = history
             return str(build_hangup("Understood. We've processed your cancellation. Goodbye."))
 
-    # Use OpenAI for dynamic retention conversation
     ai_response = get_ai_response(history)
     history.append({"role": "assistant", "content": ai_response})
 
-    # Update session
     session_memory[call_sid] = history
 
     return str(build_gather(ai_response, "/process-speech"))
