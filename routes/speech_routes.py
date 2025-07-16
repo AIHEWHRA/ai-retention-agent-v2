@@ -2,22 +2,13 @@
 
 from flask import Blueprint, request
 from services.twilio_response import build_gather, build_hangup
-from services.openai_service import get_ai_response
+from services.openai_service import get_structured_ai_response
 from services.zapier_service import send_to_zapier
 from models.session_store import session_memory, customer_info
 from services.account_service import find_user_by_phone
 import re
-import json
 
 speech_bp = Blueprint('speech_bp', __name__)
-
-accepted_phrases = ["yes", "sounds good", "let’s do it", "i'll take it", "sure", "okay", "i accept", "i'll do that", "that works"]
-decline_phrases = ["no", "cancel", "still want to cancel", "go ahead with cancellation", "just cancel"]
-
-cancel_keywords = ["cancel", "stop membership", "end my membership", "terminate membership"]
-
-def normalize_text(text):
-    return text.lower().replace("2", "two").replace("50%", "50 percent")
 
 @speech_bp.route("/collect-info", methods=["POST"])
 def collect_info():
@@ -118,41 +109,26 @@ def process_speech():
 
     history.append({"role": "user", "content": speech})
 
-    ai_response = get_ai_response(history)
-    history.append({"role": "assistant", "content": ai_response})
+    response_data = get_structured_ai_response(history)
+
+    reply = response_data["reply"]
+    offer = response_data["offer"]
+    outcome = response_data["outcome"]
+    transcript = response_data["transcript"]
 
     session_memory[call_sid] = history
 
     # Decide if conversation is done
-    if any(phrase in speech.lower() for phrase in [
-        "yes i'll take it", "i accept the offer", "go ahead and cancel", "yes cancel", 
-        "no i still want to cancel", "i decline the offer"]):
-
-        # Conversation end - summarize and send to Zapier
-        conversation_text = "\n".join([f"{m['role']}: {m['content']}" for m in history])
-        summary_prompt = [{
-            "role": "user",
-            "content": "Please summarize the following conversation as JSON with keys: offer, outcome, transcript. Only respond with raw JSON, no extra text, no markdown.\n\n" + conversation_text
-        }]
-
-        summary_response = get_ai_response(summary_prompt)
-
-        try:
-            summary_dict = json.loads(summary_response)
-            send_to_zapier(summary_dict)
-        except Exception as e:
-            print("❌ JSON parsing error:", e)
-            print("Raw summary response:", summary_response)
-
-            fallback_summary = {
-                "offer": "unknown",
-                "outcome": "unknown",
-                "transcript": conversation_text
-            }
-            send_to_zapier(fallback_summary)
+    if outcome in ["accepted", "declined", "cancellation processed"]:
+        summary_dict = {
+            "offer": offer,
+            "outcome": outcome,
+            "transcript": transcript
+        }
+        send_to_zapier(summary_dict)
 
         return str(build_hangup("Thank you for your time today. Goodbye."))
 
     else:
         # Continue the conversation
-        return str(build_gather(ai_response, "/process-speech"))
+        return str(build_gather(reply, "/process-speech"))
