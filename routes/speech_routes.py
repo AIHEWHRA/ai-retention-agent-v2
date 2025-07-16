@@ -51,7 +51,7 @@ def collect_info():
 
         if user_lookup and len(user_lookup) > 0:
             state["verified"] = True
-            state["user_id"] = user_lookup[0]["user_id"]
+            state["user_id"] = user_lookup[0]["id"]  # Use 'id' instead of 'user_id'
             state["step"] = "done"
             customer_info[call_sid] = state
             return str(build_gather("Thank you. How can I help you today?", "/process-speech"))
@@ -81,7 +81,7 @@ def collect_info():
             user_lookup = find_user_by_phone(new_digits)
             if user_lookup and len(user_lookup) > 0:
                 state["verified"] = True
-                state["user_id"] = user_lookup[0]["user_id"]
+                state["user_id"] = user_lookup[0]["id"]
                 state["step"] = "done"
                 customer_info[call_sid] = state
                 return str(build_gather("Thank you. How can I help you today?", "/process-speech"))
