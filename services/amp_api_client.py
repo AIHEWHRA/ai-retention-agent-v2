@@ -17,6 +17,7 @@ class AMPApiClient:
         }
 
     def _handle_response(self, response):
+        print(f"🔍 Raw AMP API response: {response.text}")
         if response.status_code in [200, 201]:
             return response.json()
         else:
