@@ -131,7 +131,45 @@ def process_speech():
     call_sid = request.form.get("CallSid")
     speech = request.form.get("SpeechResult", "").strip()
 
-    # Simple test response to confirm route is working
-    reply = f"You said: {speech}. We will assist you shortly."
+    # Retrieve session state
+    history = session_memory.get(call_sid, [])
+    info = customer_info.get(call_sid, {})
 
-    return str(build_gather(reply, "/process-speech"))
+    # Add user input to history
+    history.append({"role": "user", "content": speech})
+
+    # Determine intent
+    text = normalize_text(speech)
+    offer_detected = parse_offer(text, retention_offers)
+
+    # Check if it's a cancellation request
+    if any(keyword in text for keyword in cancel_keywords):
+        reply = "I'm sorry to hear you'd like to cancel. Can you share why you're thinking about it?"
+        history.append({"role": "assistant", "content": reply})
+        session_memory[call_sid] = history
+        return str(build_gather(reply, "/process-speech"))
+
+    # Handle retention offer acceptance or decline
+    if offer_detected:
+        info["offer"] = offer_detected
+        if any(phrase in text for phrase in accepted_phrases):
+            info["outcome"] = "accepted"
+            info["transcript"] = speech
+            send_to_zapier(info)
+            session_memory[call_sid] = history
+            return str(build_hangup(f"Great! We've applied the {offer_detected} to your account. Thank you for staying with us."))
+        elif any(phrase in text for phrase in decline_phrases):
+            info["outcome"] = "declined"
+            info["transcript"] = speech
+            send_to_zapier(info)
+            session_memory[call_sid] = history
+            return str(build_hangup("Understood. We've processed your cancellation. Goodbye."))
+
+    # Use OpenAI for dynamic retention conversation
+    ai_response = get_ai_response(history)
+    history.append({"role": "assistant", "content": ai_response})
+
+    # Update session
+    session_memory[call_sid] = history
+
+    return str(build_gather(ai_response, "/process-speech"))
