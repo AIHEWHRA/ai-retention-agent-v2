@@ -51,10 +51,12 @@ def collect_info():
 
         if user_lookup and len(user_lookup) > 0:
             state["verified"] = True
-            state["user_id"] = user_lookup[0]["id"]  # Use 'id' instead of 'user_id'
+            state["user_id"] = user_lookup[0]["id"]
+            state["name"] = user_lookup[0].get("name", "there")
             state["step"] = "done"
             customer_info[call_sid] = state
-            return str(build_gather("Thank you. How can I help you today?", "/process-speech"))
+            greeting = f"Hey {state['name']}, thank you for calling in today. How can we help you?"
+            return str(build_gather(greeting, "/process-speech"))
         else:
             state["verified"] = False
             state["step"] = "mobile_app_check"
@@ -82,9 +84,11 @@ def collect_info():
             if user_lookup and len(user_lookup) > 0:
                 state["verified"] = True
                 state["user_id"] = user_lookup[0]["id"]
+                state["name"] = user_lookup[0].get("name", "there")
                 state["step"] = "done"
                 customer_info[call_sid] = state
-                return str(build_gather("Thank you. How can I help you today?", "/process-speech"))
+                greeting = f"Hey {state['name']}, thank you for calling in today. How can we help you?"
+                return str(build_gather(greeting, "/process-speech"))
             else:
                 state["retry"] += 1
                 if state["retry"] >= 2:
