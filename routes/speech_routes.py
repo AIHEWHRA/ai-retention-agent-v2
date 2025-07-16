@@ -7,6 +7,7 @@ from services.zapier_service import send_to_zapier
 from models.session_store import session_memory, customer_info
 from services.account_service import find_user_by_phone
 import re
+from ast import literal_eval
 
 speech_bp = Blueprint('speech_bp', __name__)
 
@@ -119,6 +120,22 @@ def process_speech():
 
     ai_response = get_ai_response(history)
     history.append({"role": "assistant", "content": ai_response})
+
+    # Summarize for Zapier
+    summary_prompt = {
+        "role": "user",
+        "content": "Please summarize the conversation as JSON with keys: offer, outcome, transcript. Only reply with JSON, no extra text."
+    }
+
+    history.append(summary_prompt)
+    summary_response = get_ai_response(history)
+
+    try:
+        summary_dict = literal_eval(summary_response)
+        send_to_zapier(summary_dict)
+    except Exception as e:
+        print("❌ Summary parsing error:", e)
+        print("Raw summary response:", summary_response)
 
     session_memory[call_sid] = history
 
