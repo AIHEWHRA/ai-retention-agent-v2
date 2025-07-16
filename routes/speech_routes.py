@@ -39,9 +39,8 @@ def normalize_text(text):
 def collect_info():
     call_sid = request.form.get("CallSid")
 
-    # Force fresh state for new calls
-    if call_sid not in customer_info:
-        customer_info[call_sid] = {"step": "verify", "retry": 0}
+    # Always reset for new calls to avoid stuck states
+    customer_info[call_sid] = {"step": "verify", "retry": 0}
 
     state = customer_info[call_sid]
     speech = request.form.get("SpeechResult", "").strip()
