@@ -69,3 +69,16 @@ def get_retention_offer(user_id):
         "Content-Type": "application/json"
     }
     return client.user_post(path, user_jwt=None, account_id="USE-DEFAULT-ACCOUNT", data=data, custom_headers=headers)
+
+# Respond to retention offer
+def respond_retention_offer(user_id, accept_offer):
+    path = "/api-user/subscription/respond-retention-offer"
+    data = {
+        "accept_offer": accept_offer  # Boolean: True to accept, False to decline
+    }
+    headers = {
+        "Amp-User-Id": user_id,
+        "Amp-Account-Id": "USE-DEFAULT-ACCOUNT",
+        "Content-Type": "application/json"
+    }
+    return client.user_post(path, user_jwt=None, account_id="USE-DEFAULT-ACCOUNT", data=data, custom_headers=headers)
