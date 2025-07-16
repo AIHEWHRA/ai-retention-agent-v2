@@ -10,13 +10,13 @@ def build_gather(prompt_text, action):
         timeout=7,
         speech_timeout="5"  # FIX: Allows 5 seconds pause for phone numbers
     )
-    gather.say(prompt_text, voice="Polly.Raveena", language="en-US")
+    gather.say(prompt_text, voice="Polly.Joanna", language="en-US")
     response.append(gather)
     response.redirect("/no-input")
     return response
 
 def build_hangup(message):
     response = VoiceResponse()
-    response.say(message, voice="Polly.Raveena", language="en-US")
+    response.say(message, voice="Polly.Joanna", language="en-US")
     response.hangup()
     return response
