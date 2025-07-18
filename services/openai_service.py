@@ -1,71 +1,152 @@
-# File: services/openai_service.py
 
-from openai import OpenAI
 import os
 import json
-import time
+from openai import OpenAI
+from services.account_service import (
+    lookup_user_by_phone,
+    cancel_membership,
+    pause_membership,
+    apply_retention_offer
+)
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-assistant_id = os.getenv("OPENAI_ASSISTANT_ID")
 
-def get_structured_ai_response(history):
+RETENTION_OFFERS = [
+    "50% off next two billing cycles",
+    "Pause membership for up to 3 months",
+    "Downgrade to a lower plan",
+    "Apply $10 account credit"
+]
+
+functions = [
+    {
+        "name": "lookup_user_by_phone",
+        "description": "Verify user by looking up their phone number in AMP.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "phone_number": { "type": "string", "description": "The user's 10-digit phone number." }
+            },
+            "required": ["phone_number"]
+        }
+    },
+    {
+        "name": "cancel_membership",
+        "description": "Cancel the user's membership via AMP API.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "user_id": { "type": "string", "description": "AMP user ID." }
+            },
+            "required": ["user_id"]
+        }
+    },
+    {
+        "name": "pause_membership",
+        "description": "Pause the user's membership via AMP API.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "user_id": { "type": "string", "description": "AMP user ID." }
+            },
+            "required": ["user_id"]
+        }
+    },
+    {
+        "name": "apply_retention_offer",
+        "description": "Apply a retention offer to the user's account.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "user_id": { "type": "string" },
+                "offer": { "type": "string", "description": "The specific retention offer." }
+            },
+            "required": ["user_id", "offer"]
+        }
+    }
+]
+
+def run_chat_completion(history):
     try:
-        # Create a new thread for the conversation
-        thread = client.beta.threads.create()
+        phone_number = None
+        user_id = None
+        user_name = None
 
-        # Add conversation messages
-        for message in history:
-            client.beta.threads.messages.create(
-                thread_id=thread.id,
-                role=message["role"],
-                content=message["content"]
-            )
+        for msg in history:
+            if msg["role"] == "user":
+                digits = ''.join(filter(str.isdigit, msg["content"]))
+                if len(digits) == 10:
+                    phone_number = digits
+            elif msg["role"] == "function":
+                try:
+                    parsed = json.loads(msg.get("content", "{}"))
+                    user_id = parsed.get("id") or parsed.get("user_id")
+                    user_name = parsed.get("name")
+                except:
+                    pass
 
-        # Run the Assistant
-        run = client.beta.threads.runs.create(
-            thread_id=thread.id,
-            assistant_id=assistant_id
+        system_prompt = f"""
+        You are Hurricane Express Wash's AI Retention Agent.
+        Always address the user by name if known: {user_name or 'Customer'}.
+        Only offer the following retention options: {", ".join(RETENTION_OFFERS)}.
+        If user_id is known and they are not an active member, escalate with outcome = follow-up-needed.
+        Always confirm if the customer is open to a retention offer before canceling.
+        Reply in strict JSON:
+        {{
+          "reply": "Message to user",
+          "offer": "Offer made or 'none'",
+          "outcome": "accepted / declined / cancellation processed / ongoing / follow-up-needed",
+          "transcript": "Summary of conversation"
+        }}
+        Do not wrap or decorate your reply. Only emit valid JSON.
+        """.strip()
+
+        messages = [{"role": "system", "content": system_prompt}] + history
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+            functions=functions,
+            function_call="auto"
         )
 
-        # Poll until complete
-        while True:
-            run_status = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-            if run_status.status == "completed":
-                break
-            time.sleep(1)
+        choice = response.choices[0]
+        if choice.finish_reason == "function_call":
+            fn = choice.message.function_call
+            args = json.loads(fn.arguments)
+            name = fn.name
 
-        # Get the latest assistant message
-        messages = client.beta.threads.messages.list(thread_id=thread.id)
+            if name == "lookup_user_by_phone":
+                result = lookup_user_by_phone(args["phone_number"])
+            elif name == "cancel_membership":
+                result = cancel_membership(args["user_id"])
+            elif name == "pause_membership":
+                result = pause_membership(args["user_id"])
+            elif name == "apply_retention_offer":
+                if args["offer"] not in RETENTION_OFFERS:
+                    return {"reply": "That offer is not available.", "offer": "none", "outcome": "follow-up-needed", "transcript": "Invalid offer attempt."}
+                result = apply_retention_offer(args["user_id"], args["offer"])
+            else:
+                result = {"error": "Unknown function"}
 
-        for message in reversed(messages.data):
-            if message.role == "assistant":
-                # Expect raw JSON output from assistant
-                raw_text = message.content[0].text.value.strip()
-                try:
-                    return json.loads(raw_text)
-                except json.JSONDecodeError:
-                    print("❌ JSON parsing error:", raw_text)
-                    # Fallback structure
-                    return {
-                        "reply": raw_text,
-                        "offer": "unknown",
-                        "outcome": "unknown",
-                        "transcript": "\n".join([m['content'] for m in history if m['role'] == 'user'])
-                    }
+            history.append({"role": "function", "name": name, "content": json.dumps(result)})
+            return run_chat_completion(history)
 
-        return {
-            "reply": "I'm sorry, I didn't catch that. Could you repeat?",
-            "offer": "unknown",
-            "outcome": "unknown",
-            "transcript": "\n".join([m['content'] for m in history if m['role'] == 'user'])
-        }
+        else:
+            try:
+                return json.loads(choice.message.content.strip())
+            except Exception:
+                return {
+                    "reply": choice.message.content.strip(),
+                    "offer": "none",
+                    "outcome": "follow-up-needed",
+                    "transcript": "Could not parse response."
+                }
 
     except Exception as e:
-        print("❌ Assistant API error:", e)
         return {
-            "reply": "I'm sorry, there was a system issue. Please try again later.",
-            "offer": "unknown",
-            "outcome": "unknown",
-            "transcript": "\n".join([m['content'] for m in history if m['role'] == 'user'])
+            "reply": "Sorry, something went wrong.",
+            "offer": "none",
+            "outcome": "follow-up-needed",
+            "transcript": str(e)
         }
-
